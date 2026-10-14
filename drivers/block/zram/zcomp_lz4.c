@@ -8,19 +8,28 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/slab.h>
+#include <linux/vmalloc.h>
+#include <linux/mm.h>
 #include <linux/lz4.h>
 
 #include "zcomp_lz4.h"
 
 static void *zcomp_lz4_create(void)
 {
-	return kzalloc(LZ4_MEM_COMPRESS, GFP_KERNEL);
+	/*
+	 * 1.9.4 needs 16 KiB + 32 bytes. Avoid a 32 KiB slab allocation
+	 * and high-order allocation failures on memory-constrained devices.
+	 * lz4_compress() initializes the state before using it.
+	 * This can run during swapout, so do not recurse into filesystem I/O.
+	 */
+	return __vmalloc(LZ4_MEM_COMPRESS,
+		GFP_NOIO | __GFP_NORETRY | __GFP_NOWARN | __GFP_HIGHMEM,
+		PAGE_KERNEL);
 }
 
 static void zcomp_lz4_destroy(void *private)
 {
-	kfree(private);
+	vfree(private);
 }
 
 static int zcomp_lz4_compress(const unsigned char *src, unsigned char *dst,
