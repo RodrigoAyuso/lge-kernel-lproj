@@ -38,40 +38,41 @@ STATIC inline int INIT unlz4(u8 *input, int in_len,
 				void (*error) (char *x))
 {
 	int ret = -1;
-	size_t chunksize = 0;
-	size_t uncomp_chunksize = LZ4_DEFAULT_UNCOMPRESSED_CHUNK_SIZE;
-	u8 *inp;
-	u8 *inp_start;
-	u8 *outp;
 	int size = in_len;
-#ifdef PREBOOT
-	size_t out_len = get_unaligned_le32(input + in_len);
-#endif
+	size_t chunksize;
 	size_t dest_len;
+	size_t uncomp_chunksize = LZ4_DEFAULT_UNCOMPRESSED_CHUNK_SIZE;
+	u8 *inp, *inp_start;
+	u8 *outp;
+#ifdef PREBOOT
+	size_t out_len;
+	size_t expected_len;
 
+	if (!input || in_len < 4) {
+		error("Truncated LZ4 kernel image");
+		return -1;
+	}
+	out_len = get_unaligned_le32(input + in_len);
+#endif
 
+	if ((input && fill) || (!input && !fill)) {
+		error("Invalid LZ4 input source");
+		return -1;
+	}
 	if (output) {
 		outp = output;
 	} else if (!flush) {
 		error("NULL output pointer and no flush function provided");
-		goto exit_0;
+		return -1;
 	} else {
 		outp = large_malloc(uncomp_chunksize);
 		if (!outp) {
 			error("Could not allocate output buffer");
-			goto exit_0;
+			return -1;
 		}
 	}
-
-	if (input && fill) {
-		error("Both input pointer and fill function provided,");
-		goto exit_1;
-	} else if (input) {
-		inp = input;
-	} else if (!fill) {
-		error("NULL input pointer and missing fill function");
-		goto exit_1;
-	} else {
+	inp = input;
+	if (!input) {
 		inp = large_malloc(lz4_compressbound(uncomp_chunksize));
 		if (!inp) {
 			error("Could not allocate input buffer");
@@ -79,89 +80,108 @@ STATIC inline int INIT unlz4(u8 *input, int in_len,
 		}
 	}
 	inp_start = inp;
-
 	if (posp)
 		*posp = 0;
 
-	if (fill)
-		fill(inp, 4);
-
-	chunksize = get_unaligned_le32(inp);
-	if (chunksize == ARCHIVE_MAGICNUMBER) {
-		inp += 4;
-		size -= 4;
-	} else {
-		error("invalid header");
+	if (fill) {
+		if (fill(inp, 4) != 4) {
+			error("Truncated LZ4 header");
+			goto exit_2;
+		}
+	} else if (size < 4) {
+		error("Truncated LZ4 header");
 		goto exit_2;
 	}
-
+	if (get_unaligned_le32(inp) != ARCHIVE_MAGICNUMBER) {
+		error("Invalid LZ4 legacy header");
+		goto exit_2;
+	}
+	if (!fill) {
+		inp += 4;
+		size -= 4;
+	}
 	if (posp)
 		*posp += 4;
 
 	for (;;) {
-
-		if (fill)
-			fill(inp, 4);
-
-		chunksize = get_unaligned_le32(inp);
-		if (chunksize == ARCHIVE_MAGICNUMBER) {
-			inp += 4;
-			size -= 4;
-			if (posp)
-				*posp += 4;
-			continue;
-		}
-		inp += 4;
-		size -= 4;
-
-		if (posp)
-			*posp += 4;
-
 		if (fill) {
-			if (chunksize > lz4_compressbound(uncomp_chunksize)) {
-				error("chunk length is longer than allocated");
+			int count = fill(inp, 4);
+
+			if (!count)
+				break;
+			if (count != 4) {
+				error("Truncated LZ4 block header");
 				goto exit_2;
 			}
-			fill(inp, chunksize);
+		} else {
+			if (!size)
+				break;
+			if (size < 4) {
+				error("Truncated LZ4 block header");
+				goto exit_2;
+			}
+		}
+		chunksize = get_unaligned_le32(inp);
+		if (!fill) {
+			inp += 4;
+			size -= 4;
+		}
+		if (posp)
+			*posp += 4;
+		if (chunksize == ARCHIVE_MAGICNUMBER)
+			continue;
+		if (!chunksize ||
+		    chunksize > lz4_compressbound(uncomp_chunksize)) {
+			error("Invalid LZ4 block length");
+			goto exit_2;
+		}
+		if (fill) {
+			if (fill(inp, chunksize) != chunksize) {
+				error("Truncated LZ4 block");
+				goto exit_2;
+			}
+		} else if (chunksize > size) {
+			error("Truncated LZ4 block");
+			goto exit_2;
+		}
+		dest_len = uncomp_chunksize;
+#ifdef PREBOOT
+		if (out_len < dest_len)
+			dest_len = out_len;
+		expected_len = dest_len;
+#endif
+		/* Bound both reads and writes, including the early boot path. */
+		if (lz4_decompress_unknownoutputsize(inp, chunksize, outp,
+						    &dest_len) < 0) {
+			error("LZ4 decoding failed");
+			goto exit_2;
 		}
 #ifdef PREBOOT
-		if (out_len >= uncomp_chunksize) {
-			dest_len = uncomp_chunksize;
-			out_len -= dest_len;
-		} else
-			dest_len = out_len;
-		ret = lz4_decompress(inp, &chunksize, outp, dest_len);
-#else
-		dest_len = uncomp_chunksize;
-		ret = lz4_decompress_unknownoutputsize(inp, chunksize, outp,
-				&dest_len);
-#endif
-		if (ret < 0) {
-			error("Decoding failed");
+		if (dest_len != expected_len) {
+			error("Invalid LZ4 kernel output size");
 			goto exit_2;
 		}
-
-		if (flush && flush(outp, dest_len) != dest_len)
+		out_len -= dest_len;
+#endif
+		if (flush && flush(outp, dest_len) != dest_len) {
+			error("LZ4 output flush failed");
 			goto exit_2;
+		}
 		if (output)
 			outp += dest_len;
 		if (posp)
 			*posp += chunksize;
-
-		size -= chunksize;
-
-		if (size == 0)
-			break;
-		else if (size < 0) {
-			error("data corrupted");
-			goto exit_2;
+		if (!fill) {
+			inp += chunksize;
+			size -= chunksize;
 		}
-
-		inp += chunksize;
-		if (fill)
-			inp = inp_start;
 	}
-
+#ifdef PREBOOT
+	if (out_len) {
+		error("Truncated LZ4 kernel output");
+		goto exit_2;
+	}
+#endif
 	ret = 0;
 exit_2:
 	if (!input)
@@ -169,7 +189,6 @@ exit_2:
 exit_1:
 	if (!output)
 		large_free(outp);
-exit_0:
 	return ret;
 }
 
@@ -182,6 +201,10 @@ STATIC int INIT decompress(unsigned char *buf, int in_len,
 			      void(*error)(char *x)
 	)
 {
+	if (in_len < 8) {
+		error("Truncated LZ4 kernel image");
+		return -1;
+	}
 	return unlz4(buf, in_len - 4, fill, flush, output, posp, error);
 }
 #endif
