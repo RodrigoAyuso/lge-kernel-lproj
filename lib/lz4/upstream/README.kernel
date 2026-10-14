@@ -1,0 +1,28 @@
+Source: https://github.com/lz4/lz4
+Tag: v1.9.4
+Commit: 5ff839680134437dbf4678f3d0c7b371d84f4964
+License: BSD-2-Clause (see LICENSE and the source file headers).
+
+The block codec is built through the legacy Linux 3.4 adapters one level up.
+lz4_compat.h selects the upstream freestanding API, compiler builtins for
+memory operations, private static linkage, and forced inline for GNU89.
+No allocation or streaming API is exported to the rest of this kernel.
+
+Changes to the imported sources:
+- lz4.h uses linux/types.h under __KERNEL__; its C99 stdint branch is disabled
+  in kernel builds. The deprecated allocator declaration is guarded in the
+  same way as its disabled implementation.
+- lz4.c avoids libc limits.h/stdint.h under __KERNEL__. Linux already assumes
+  a 32-bit int, so its userspace UINT_MAX preprocessor check is skipped.
+- Four internal functions in lz4.c use LZ4LIB_API to inherit the adapter's
+  private linkage, avoiding duplicate global symbols between legacy objects.
+- lz4hc.c, lz4hc.h and LICENSE are unchanged from the tag.
+
+The Linux-facing lz4_compress/lz4hc_compress APIs retain the original
+requirement that the destination hold lz4_compressbound(src_len) bytes.
+The normal compressor uses acceleration 1; HC uses the upstream default
+level 9. zRAM still selects the normal compressor.
+
+Workspace sizes are 16416 bytes for LZ4 and 262200 bytes for LZ4 HC. The
+adapters check the sizes at compile time. Rebuild every caller with the
+updated include/linux/lz4.h; do not mix these objects with old modules.

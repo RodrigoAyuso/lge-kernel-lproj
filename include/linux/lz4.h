@@ -9,8 +9,11 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
-#define LZ4_MEM_COMPRESS	(16384)
-#define LZ4HC_MEM_COMPRESS	(262144 + (2 * sizeof(unsigned char *)))
+#include <linux/types.h>
+
+/* LZ4 1.9.4 state sizes; checked against the upstream types in the adapters. */
+#define LZ4_MEM_COMPRESS	(16384 + 32)
+#define LZ4HC_MEM_COMPRESS	(262200)
 
 /*
  * lz4_compressbound()
