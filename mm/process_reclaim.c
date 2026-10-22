@@ -10,6 +10,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+#include <linux/atomic.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
@@ -201,7 +202,7 @@ static void swap_fn(struct work_struct *work)
 
 		if (efficiency < swap_opt_eff) {
 			if (++monitor_eff == swap_eff_win) {
-				atomic_set(&skip_reclaim, swap_eff_win + 1);
+				atomic_set(&skip_reclaim, swap_eff_win);
 				monitor_eff = 0;
 			}
 		} else {
@@ -225,7 +226,8 @@ static int vmpressure_notifier(struct notifier_block *nb,
 	if (!current_is_kswapd())
 		return 0;
 
-	if (!atomic_dec_and_test(&skip_reclaim))
+	/* Skip only the requested number of notifications; keep zero at zero. */
+	if (atomic_add_unless(&skip_reclaim, -1, 0))
 		return 0;
 
 	if ((pressure >= pressure_min) && (pressure < pressure_max))
