@@ -875,6 +875,7 @@ static void dbs_refresh_callback(struct work_struct *work)
 	struct cpu_dbs_info_s *this_dbs_info;
 	struct dbs_work_struct *dbs_work;
 	unsigned int cpu;
+	unsigned int target_freq;
 
 	dbs_work = container_of(work, struct dbs_work_struct, work);
 	cpu = dbs_work->cpu;
@@ -891,17 +892,17 @@ static void dbs_refresh_callback(struct work_struct *work)
 		goto bail_incorrect_governor;
 	}
 
-	if (policy->cur < dbs_tuners_ins.hispeed_freq) {
-                /*
-		 * Arch specific cpufreq driver may fail.
-		 * Don't update governor frequency upon failure.
-		 */
-		if (__cpufreq_driver_target(policy, dbs_tuners_ins.hispeed_freq,
-					CPUFREQ_RELATION_L) >= 0)
-		policy->cur = dbs_tuners_ins.hispeed_freq;
-
-		this_dbs_info->prev_cpu_idle = get_cpu_idle_time(cpu,
-				&this_dbs_info->prev_cpu_wall);
+	/* Respect the current policy cap, including thermal/user limits. */
+	target_freq = min_t(u64, dbs_tuners_ins.hispeed_freq, policy->max);
+	if (policy->cur < target_freq) {
+		if (__cpufreq_driver_target(policy, target_freq,
+					CPUFREQ_RELATION_L) >= 0) {
+			/* The driver reports the actual frequency via POSTCHANGE. */
+			this_dbs_info->prev_cpu_idle = get_cpu_idle_time(cpu,
+					&this_dbs_info->prev_cpu_wall);
+			this_dbs_info->prev_cpu_iowait = get_cpu_iowait_time(cpu,
+					&this_dbs_info->prev_cpu_wall);
+		}
 	}
 
 bail_incorrect_governor:
@@ -916,6 +917,10 @@ static void dbs_input_event(struct input_handle *handle, unsigned int type,
 		unsigned int code, int value)
 {
 	int i;
+
+	/* Boost once per completed touch report, not for every axis/contact. */
+	if (type != EV_SYN || code != SYN_REPORT)
+		return;
 
 	if ((dbs_tuners_ins.powersave_bias == POWERSAVE_BIAS_MAXLEVEL) ||
 		(dbs_tuners_ins.powersave_bias == POWERSAVE_BIAS_MINLEVEL)) {
