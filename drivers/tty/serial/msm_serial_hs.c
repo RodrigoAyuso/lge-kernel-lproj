@@ -1917,8 +1917,9 @@ static int msm_hs_startup(struct uart_port *uport)
 	msm_hs_write(uport, UARTDM_DMEN_ADDR, data);
 
 
-	/* Reset both RX and TX HW state machine */
-	msm_hs_write(uport, UARTDM_CR_ADDR, (RESET_RX | RESET_TX));
+	/* The channel command field encodes one operation, not a bitmask. */
+	msm_hs_write(uport, UARTDM_CR_ADDR, RESET_TX);
+	msm_hs_write(uport, UARTDM_CR_ADDR, RESET_RX);
 	/*
 	 * Rx and Tx reset operation takes few clock cycles, hence as
 	 * safe side adding 10us delay.
