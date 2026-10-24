@@ -82,8 +82,11 @@ int marimba_read_bahama_ver(struct marimba *marimba)
 	case 0x00:
 		return BAHAMA_VER_1_0;
 	case 0x09: /* variant of bahama v2 */
+	case 0x0a: /* Bahama v2.1 uses the v2.0 configuration. */
 		return BAHAMA_VER_2_0;
 	default:
+		pr_err("%s: unsupported Bahama revision 0x%02x\n",
+			__func__, bahama_version);
 		return BAHAMA_VER_UNSUPPORTED;
 	}
 }
