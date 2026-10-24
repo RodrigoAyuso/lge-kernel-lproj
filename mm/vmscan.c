@@ -1038,13 +1038,17 @@ static unsigned long shrink_page(struct page *page,
 					struct list_head *ret_pages)
 {
 	int reclaimed;
+	int file = page_is_file_cache(page);
 	LIST_HEAD(page_list);
 	list_add(&page->lru, &page_list);
 
 	reclaimed = shrink_page_list(&page_list, zone, sc, ttu_flags,
 				ret_nr_dirty, ret_nr_writeback,
 				force_reclaim);
-	if (!reclaimed)
+	/* The page may already have been freed or returned to the LRU. */
+	if (list_empty(&page_list))
+		mod_zone_page_state(zone, NR_ISOLATED_ANON + file, -1);
+	else
 		list_splice(&page_list, ret_pages);
 
 	return reclaimed;
@@ -1064,7 +1068,7 @@ unsigned long reclaim_pages_from_list(struct list_head *page_list,
 
 	LIST_HEAD(ret_pages);
 	struct page *page;
-	unsigned long dummy1, dummy2;
+	unsigned long dummy1 = 0, dummy2 = 0;
 	unsigned long nr_reclaimed = 0;
 
 	while (!list_empty(page_list)) {
