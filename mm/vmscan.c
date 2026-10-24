@@ -1074,7 +1074,7 @@ unsigned long reclaim_pages_from_list(struct list_head *page_list,
 		ClearPageActive(page);
 		nr_reclaimed += shrink_page(page, page_zone(page), &sc,
 			TTU_UNMAP|TTU_IGNORE_ACCESS,
-			&dummy1, &dummy2, true, page_list);
+			&dummy1, &dummy2, true, &ret_pages);
 	}
 
 	while (!list_empty(&ret_pages)) {
