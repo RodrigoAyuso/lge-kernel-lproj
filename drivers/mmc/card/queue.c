@@ -14,6 +14,7 @@
 #include <linux/blkdev.h>
 #include <linux/freezer.h>
 #include <linux/kthread.h>
+#include <linux/sched.h>
 #include <linux/scatterlist.h>
 
 #include <linux/mmc/card.h>
@@ -61,6 +62,14 @@ static int mmc_queue_thread(void *d)
 	struct request *req;
 
 	current->flags |= PF_MEMALLOC;
+
+#if defined(CONFIG_MACH_MSM7X25A_V1) || \
+    defined(CONFIG_MACH_MSM7X25A_V3)
+	/* Keep internal eMMC dispatch responsive under app startup load. */
+	if (mmc_card_mmc(mq->card) && mq->card->host->index == 0 &&
+	    task_nice(current) > -5)
+		set_user_nice(current, -5);
+#endif
 
 	down(&mq->thread_sem);
 	do {
