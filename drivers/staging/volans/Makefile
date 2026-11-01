@@ -4,4 +4,4 @@ MODNAME := wlan
 
 # Module information used by KBuild framework
 obj-$(CONFIG_VOLANS_WLAN) += $(MODNAME).o
-$(MODNAME)-objs := volans_wlan.o
+$(MODNAME)-objs := volans_wlan.o preempt_compat.o
