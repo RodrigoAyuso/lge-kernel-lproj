@@ -1,0 +1,60 @@
+{
+  "description": "Reviewed bootstrap of the root Makefile to the exact pinned Linux 3.18.140 Makefile. The hardware port and all other conflicts remain unfinished.",
+  "source_commit": "1327a704761cfa043f94e4fe6d1b35e604860b2a",
+  "comparison_base_commit": "76e10d158efb6d4516018846f60c2ab5501900bc",
+  "target_commit": "6b1ae527b1fdee86e81da0cb26ced75731c6c0fa",
+  "files": [
+    {
+      "path": "Makefile",
+      "sha256_before": "8db07a3d97955f7d0cfa6f9110f6e069f8fcd952cfeb1c2b5e4dd33c95257d7f",
+      "sha256_after": "bbc85c71838dac27225fb53ef341fd9db8975dde47c8b9edb1ef2402de8f6d62",
+      "replacements": [
+        {
+          "before": "<<<<<<< 1327a704761cfa043f94e4fe6d1b35e604860b2a\nHOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 -fno-tree-vectorize -fomit-frame-pointer\nHOSTCXXFLAGS = -O3 -fno-tree-vectorize\n=======\nHOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fomit-frame-pointer -std=gnu89\nHOSTCXXFLAGS = -O2\n>>>>>>> 6b1ae527b1fdee86e81da0cb26ced75731c6c0fa\n",
+          "after": "HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fomit-frame-pointer -std=gnu89\nHOSTCXXFLAGS = -O2\n",
+          "reason": "Use upstream host build flags, including GNU89 required by this kernel generation."
+        },
+        {
+          "before": "<<<<<<< 1327a704761cfa043f94e4fe6d1b35e604860b2a\nCFLAGS_KERNEL   = $(OPTIMIZATION_FLAGS)\nAFLAGS_KERNEL   = $(OPTIMIZATION_FLAGS)\nCFLAGS_GCOV     = -fprofile-arcs -ftest-coverage\n=======\nCFLAGS_KERNEL\t=\nAFLAGS_KERNEL\t=\nCFLAGS_GCOV\t= -fprofile-arcs -ftest-coverage -fno-tree-loop-im\n>>>>>>> 6b1ae527b1fdee86e81da0cb26ced75731c6c0fa\n",
+          "after": "CFLAGS_KERNEL\t=\nAFLAGS_KERNEL\t=\nCFLAGS_GCOV\t= -fprofile-arcs -ftest-coverage -fno-tree-loop-im\n",
+          "reason": "Keep upstream empty per-kernel flags and the stable GCOV compiler workaround."
+        },
+        {
+          "before": "<<<<<<< 1327a704761cfa043f94e4fe6d1b35e604860b2a\n\t\t   -fno-delete-null-pointer-checks \\\n\t\t   -marm -mfloat-abi=softfp -march=armv7-a -mfpu=neon \\\n\t\t   -ffast-math -pipe -funswitch-loops -fpredictive-commoning \\\n\t\t   -fgcse-after-reload -ftree-vectorize  -fno-tree-vectorize \\\n\t\t   -funsafe-math-optimizations -fsched-spec-load \\\n\t\t   -mvectorize-with-neon-quad -fmodulo-sched \\\n\t\t   -fmodulo-sched-allow-regmoves\n=======\n\t\t   -std=gnu89\n>>>>>>> 6b1ae527b1fdee86e81da0cb26ced75731c6c0fa\n",
+          "after": "\t\t   -std=gnu89\n",
+          "reason": "Let the ARM architecture Makefile choose CPU/ABI flags; remove global vendor NEON and floating-point optimizations."
+        },
+        {
+          "before": "<<<<<<< 1327a704761cfa043f94e4fe6d1b35e604860b2a\nKBUILD_CFLAGS\t+= $(call cc-disable-warning,maybe-uninitialized,)\n\nifdef CONFIG_CC_OPTIMIZE_FOR_SIZE\nKBUILD_CFLAGS += -Os\nendif\nifdef CONFIG_CC_OPTIMIZE_DEFAULT\nKBUILD_CFLAGS += -O2\nendif\nifdef CONFIG_CC_OPTIMIZE_MORE\nKBUILD_CFLAGS += -O3 -fno-inline-functions\nendif\nifdef CONFIG_CC_OPTIMIZE_FAST\nKBUILD_CFLAGS += -Ofast -fno-inline-functions\n=======\ninclude $(srctree)/arch/$(SRCARCH)/Makefile\n\nKBUILD_CFLAGS\t+= $(call cc-option,-fno-delete-null-pointer-checks,)\nKBUILD_CFLAGS\t+= $(call cc-disable-warning,frame-address,)\nKBUILD_CFLAGS\t+= $(call cc-disable-warning, format-truncation)\nKBUILD_CFLAGS\t+= $(call cc-disable-warning, format-overflow)\nKBUILD_CFLAGS\t+= $(call cc-disable-warning, int-in-bool-context)\nKBUILD_CFLAGS\t+= $(call cc-disable-warning, attribute-alias)\nKBUILD_CFLAGS\t+= $(call cc-option,-fno-PIE)\nKBUILD_AFLAGS\t+= $(call cc-option,-fno-PIE)\n\nifdef CONFIG_CC_OPTIMIZE_FOR_SIZE\nKBUILD_CFLAGS\t+= -Os $(call cc-disable-warning,maybe-uninitialized,)\nelse\nKBUILD_CFLAGS\t+= -O2\n>>>>>>> 6b1ae527b1fdee86e81da0cb26ced75731c6c0fa\n",
+          "after": "include $(srctree)/arch/$(SRCARCH)/Makefile\n\nKBUILD_CFLAGS\t+= $(call cc-option,-fno-delete-null-pointer-checks,)\nKBUILD_CFLAGS\t+= $(call cc-disable-warning,frame-address,)\nKBUILD_CFLAGS\t+= $(call cc-disable-warning, format-truncation)\nKBUILD_CFLAGS\t+= $(call cc-disable-warning, format-overflow)\nKBUILD_CFLAGS\t+= $(call cc-disable-warning, int-in-bool-context)\nKBUILD_CFLAGS\t+= $(call cc-disable-warning, attribute-alias)\nKBUILD_CFLAGS\t+= $(call cc-option,-fno-PIE)\nKBUILD_AFLAGS\t+= $(call cc-option,-fno-PIE)\n\nifdef CONFIG_CC_OPTIMIZE_FOR_SIZE\nKBUILD_CFLAGS\t+= -Os $(call cc-disable-warning,maybe-uninitialized,)\nelse\nKBUILD_CFLAGS\t+= -O2\n",
+          "reason": "Retain the 3.18 architecture Makefile include, stable compiler workarounds and upstream optimization selection."
+        },
+        {
+          "before": "REAL_CC\t\t= $(CROSS_COMPILE)gcc",
+          "after": "CC\t\t= $(CROSS_COMPILE)gcc",
+          "reason": "Use the upstream compiler invocation instead of the vendor Python 2 compiler wrapper."
+        },
+        {
+          "before": "# Use the wrapper for the compiler.  This wrapper scans for new\n# warnings and causes the build to stop upon encountering them.\nCC\t\t= $(srctree)/scripts/gcc-wrapper.py $(REAL_CC)\n\n",
+          "after": "",
+          "reason": "Remove the now-unused legacy warning wrapper hook."
+        },
+        {
+          "before": "OPTIMIZATION_FLAGS = -march=armv7-a -mtune=cortex-a5 -mfpu=neon \\\n\t\t     -mcpu=cortex-a5 -ffast-math -fsingle-precision-constant \\\n\t\t     -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr \\\n\t\t     -funswitch-loops -fpredictive-commoning -fgcse-after-reload \\\n\t\t     -fipa-cp-clone -finline-functions -fvect-cost-model\nCFLAGS_MODULE   = $(OPTIMIZATION_FLAGS)\nAFLAGS_MODULE   = $(OPTIMIZATION_FLAGS)\n",
+          "after": "CFLAGS_MODULE   =\nAFLAGS_MODULE   =\n",
+          "reason": "Use upstream module flags and leave ARM CPU/ABI selection to the architecture build rules."
+        },
+        {
+          "before": "KBUILD_CFLAGS_MODULE  := -DMODULE -fno-pic",
+          "after": "KBUILD_CFLAGS_MODULE  := -DMODULE",
+          "reason": "Retain upstream module code generation defaults."
+        },
+        {
+          "before": ".PHONY: $(PHONY)\n\n",
+          "after": ".PHONY: $(PHONY)\n",
+          "reason": "Remove the vendor trailing blank line so the resolved Makefile matches the pinned upstream file."
+        }
+      ]
+    }
+  ]
+}
