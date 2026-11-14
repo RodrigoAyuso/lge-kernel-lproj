@@ -11,6 +11,7 @@
  */
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/version.h>
 #include <linux/gpio_event.h>
 #include <linux/memblock.h>
 #include <asm/mach-types.h>
@@ -843,7 +844,11 @@ MACHINE_START(MSM7X25A_V3, "MSM7225A v3")
 	.reserve	= msm7x27a_reserve,
 	.init_irq	= msm_init_irq,
 	.init_machine	= msm7x2x_init,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0)
+	.init_time	= msm_timer_init,
+#else
 	.timer		= &msm_timer,
+#endif
 	.init_early     = msm7x2x_init_early,
 	.handle_irq	= vic_handle_irq,
 MACHINE_END

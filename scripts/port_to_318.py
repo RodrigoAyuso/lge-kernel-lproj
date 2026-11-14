@@ -34,6 +34,21 @@ CONFIGS = (
 CRITICAL = ("ARCH_MSM7X27A", "MACH_LGE", "MSM_KGSL",
             "FB_MSM_MDP303", "MSM7X27A_AUDIO", "ANDROID_BINDER_IPC")
 MARKERS = re.compile(rb"^(?:<{7} |>{7} |[|]{7} )", re.M)
+VEE3_DEFCONFIG = "lineage_vee3_defconfig"
+VEE3_REQUIRED = {
+    "ARCH_MSM7X27A": "y", "MACH_LGE": "y", "MACH_MSM7X25A_V3": "y",
+    "LGE_BOARD_HEADER_FILE": '"mach/lge/board_v3.h"', "CPU_V7": "y",
+    "PHYS_OFFSET": "0x00200000", "MACH_LGE_2ND_GEN_KK_WORKAROUD": "y",
+    "MSM_SMD": "y", "MSM_ONCRPCROUTER": "y", "MSM_KGSL": "y",
+    "FB_MSM_MDP303": "y", "MSM7X27A_AUDIO": "y", "MSM_CAMERA_V4L2": "y",
+    "TOUCHSCREEN_MELFAS_MMS128S": "y", "SENSORS_BMA2X2": "y",
+    "SENSORS_BMM050": "y", "SENSOR_APDS9190": "y", "MMC_MSM": "y",
+    "MMC_MSM_SDC1_SUPPORT": "y", "MTD_MSM_NAND": "y", "RTC_DRV_MSM": "y",
+    "VOLANS_WLAN": "m", "ANDROID_BINDER_IPC": "y", "SERIAL_MSM": "y",
+    "SERIAL_MSM_CONSOLE": "y",
+}
+VEE3_FORBIDDEN = ("MACH_MSM7X25A_M4", "MACH_MSM7X27A_U0",
+                  "MACH_MSM7X25A_V1", "MACH_MSM8X25_V7", "SMP")
 
 
 class PortError(RuntimeError):
@@ -72,6 +87,24 @@ def version(data):
 
 def config_values(data):
     return dict(re.findall(r"^CONFIG_([A-Za-z0-9_]+)=(.+)$", data.decode(), re.M))
+
+
+def validate_device_config(name, wanted, actual):
+    """Reject dropped module/board selections and a mismatched Vee3 identity."""
+    required = {key: value for key, value in wanted.items()
+                if (key in CRITICAL or key.startswith("MACH_MSM7"))
+                and value in ("y", "m")}
+    forbidden = ()
+    if name == VEE3_DEFCONFIG:
+        required.update(VEE3_REQUIRED)
+        forbidden = VEE3_FORBIDDEN
+    failures = ["%s=%s (got %s)" % (key, expected, actual.get(key, "n"))
+                for key, expected in sorted(required.items())
+                if actual.get(key) != expected]
+    failures.extend(key + " must be disabled for Vee3"
+                    for key in forbidden if actual.get(key) in ("y", "m"))
+    if failures:
+        raise PortError("Required device configuration lost or changed: " + "; ".join(failures))
 
 
 def source_configs(repo, ref):
@@ -297,11 +330,7 @@ def build(worktree, config, cross_compile, output, jobs):
             if result.returncode:
                 raise PortError("Configuration failed; inspect " + str(output / "build.log"))
         actual = config_values((output / ".config").read_bytes())
-        required = set(CRITICAL) | {k for k, v in wanted.items()
-                                    if k.startswith("MACH_MSM7") and v == "y"}
-        dropped = sorted(k for k in required if wanted.get(k) == "y" and actual.get(k) != "y")
-        if dropped:
-            raise PortError("Required device configuration lost: " + ", ".join(dropped))
+        validate_device_config(config, wanted, actual)
         result = subprocess.run(command + ["-j" + str(jobs), "zImage", "modules"],
                                 stdout=log, stderr=subprocess.STDOUT)
         if result.returncode:
@@ -326,9 +355,12 @@ def main():
     edits.add_argument("--manifest", type=Path, required=True)
     state = sub.add_parser("status")
     state.add_argument("--worktree", type=Path, required=True)
+    vee3_check = sub.add_parser("check-vee3-config", help="Validate Vee3 hardware selections in a .config")
+    vee3_check.add_argument("--config", type=Path, required=True)
     compile_cmd = sub.add_parser("build", help="Build only after merge and config guards pass")
     compile_cmd.add_argument("--worktree", type=Path, required=True)
-    compile_cmd.add_argument("--defconfig", choices=CONFIGS, required=True)
+    compile_cmd.add_argument("--defconfig", choices=CONFIGS, default=VEE3_DEFCONFIG,
+                             help="Device configuration (default: Vee3)")
     compile_cmd.add_argument("--cross-compile", required=True)
     compile_cmd.add_argument("--output", type=Path, required=True)
     compile_cmd.add_argument("--jobs", type=int, default=min(os.cpu_count() or 1, 8))
@@ -354,6 +386,12 @@ def main():
         elif args.command == "status":
             response = status(args.worktree)
             response.pop("conflict_paths")
+        elif args.command == "check-vee3-config":
+            values = config_values(args.config.read_bytes())
+            validate_device_config(VEE3_DEFCONFIG, {}, values)
+            response = {"device": "vee3", "configuration": "valid",
+                        "checked_required_symbols": len(VEE3_REQUIRED),
+                        "scope": "configuration_only"}
         else:
             if args.jobs < 1:
                 raise PortError("--jobs must be positive")

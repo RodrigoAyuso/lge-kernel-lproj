@@ -24,11 +24,18 @@
 #include <linux/io.h>
 #include <linux/percpu.h>
 #include <linux/mm.h>
+#include <linux/version.h>
 
+#ifdef CONFIG_LOCAL_TIMERS
 #include <asm/localtimer.h>
+#endif
 #include <asm/mach/time.h>
 #include <asm/hardware/gic.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0)
+#include <linux/sched_clock.h>
+#else
 #include <asm/sched_clock.h>
+#endif
 #include <asm/smp_plat.h>
 #include <asm/user_accessible_timer.h>
 #include <mach/msm_iomap.h>
@@ -935,7 +942,11 @@ int __init msm_timer_init_time_sync(void (*timeout)(void))
 
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0)
+static u64 notrace msm_read_sched_clock(void)
+#else
 static u32 notrace msm_read_sched_clock(void)
+#endif
 {
 	struct msm_clock *clock = &msm_clocks[msm_global_timer];
 	struct clocksource *cs = &clock->clocksource;
@@ -953,7 +964,12 @@ static void __init msm_sched_clock_init(void)
 {
 	struct msm_clock *clock = &msm_clocks[msm_global_timer];
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0)
+	sched_clock_register(msm_read_sched_clock, 32 - clock->shift,
+			     clock->freq);
+#else
 	setup_sched_clock(msm_read_sched_clock, 32 - clock->shift, clock->freq);
+#endif
 }
 
 #ifdef CONFIG_LOCAL_TIMERS
@@ -1012,7 +1028,7 @@ static struct local_timer_ops msm_lt_ops = {
 };
 #endif /* CONFIG_LOCAL_TIMERS */
 
-static void __init msm_timer_init(void)
+void __init msm_timer_init(void)
 {
 	int i;
 	int res;
@@ -1187,6 +1203,8 @@ static void __init msm_timer_init(void)
 #endif
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 18, 0)
 struct sys_timer msm_timer = {
 	.init = msm_timer_init
 };
+#endif

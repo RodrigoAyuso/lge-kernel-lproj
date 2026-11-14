@@ -1,5 +1,5 @@
 {
-  "description": "Reviewed bootstrap of the root Makefile to the exact pinned Linux 3.18.140 Makefile. The hardware port and all other conflicts remain unfinished.",
+  "description": "Reviewed bootstrap of the top-level and ARM Makefiles to the exact pinned Linux 3.18.140 versions; the hardware port remains incomplete.",
   "source_commit": "1327a704761cfa043f94e4fe6d1b35e604860b2a",
   "comparison_base_commit": "76e10d158efb6d4516018846f60c2ab5501900bc",
   "target_commit": "6b1ae527b1fdee86e81da0cb26ced75731c6c0fa",
@@ -53,6 +53,33 @@
           "before": ".PHONY: $(PHONY)\n\n",
           "after": ".PHONY: $(PHONY)\n",
           "reason": "Remove the vendor trailing blank line so the resolved Makefile matches the pinned upstream file."
+        }
+      ]
+    },
+    {
+      "path": "arch/arm/Makefile",
+      "sha256_before": "cb147a31184deece1e3b6f34134d50daf87438f770190f40c62f495a7b63c678",
+      "sha256_after": "519cb6ef6b877cf79445d252ee16205e1393cb57b89a390b3ca3258816e701e4",
+      "replacements": [
+        {
+          "before": "<<<<<<< 1327a704761cfa043f94e4fe6d1b35e604860b2a\narch-$(CONFIG_CPU_32v7)\t\t:=-D__LINUX_ARM_ARCH__=7 $(call cc-option,-mtune=cortex-a5 -mcpu=cortex-a5 -march=armv7-a -mfpu=neon -ftree-vectorize -Wa$(comma)-march=armv7-a)\narch-$(CONFIG_CPU_32v6)\t\t:=-D__LINUX_ARM_ARCH__=6 $(call cc-option,-march=armv6,-march=armv5t -Wa$(comma)-march=armv6)\n=======\narch-$(CONFIG_CPU_32v7M)\t=-D__LINUX_ARM_ARCH__=7 -march=armv7-m -Wa,-march=armv7-m\narch-$(CONFIG_CPU_32v7)\t\t=-D__LINUX_ARM_ARCH__=7 $(call cc-option,-march=armv7-a,-march=armv5t -Wa$(comma)-march=armv7-a)\narch-$(CONFIG_CPU_32v6)\t\t=-D__LINUX_ARM_ARCH__=6 $(call cc-option,-march=armv6,-march=armv5t -Wa$(comma)-march=armv6)\n>>>>>>> 6b1ae527b1fdee86e81da0cb26ced75731c6c0fa\n",
+          "after": "arch-$(CONFIG_CPU_32v7M)\t=-D__LINUX_ARM_ARCH__=7 -march=armv7-m -Wa,-march=armv7-m\narch-$(CONFIG_CPU_32v7)\t\t=-D__LINUX_ARM_ARCH__=7 $(call cc-option,-march=armv7-a,-march=armv5t -Wa$(comma)-march=armv7-a)\narch-$(CONFIG_CPU_32v6)\t\t=-D__LINUX_ARM_ARCH__=6 $(call cc-option,-march=armv6,-march=armv5t -Wa$(comma)-march=armv6)\n",
+          "reason": "Retain the upstream ARMv7-A instruction-set selection and remove forced Cortex-A5 NEON/vectorization compiler flags from the legacy kernel."
+        },
+        {
+          "before": "<<<<<<< 1327a704761cfa043f94e4fe6d1b35e604860b2a\n=======\ntextofs-$(CONFIG_ARCH_MSM7X30) := 0x00208000\ntextofs-$(CONFIG_ARCH_MSM8X60) := 0x00208000\ntextofs-$(CONFIG_ARCH_MSM8960) := 0x00208000\ntextofs-$(CONFIG_ARCH_AXXIA) := 0x00308000\n>>>>>>> 6b1ae527b1fdee86e81da0cb26ced75731c6c0fa\n",
+          "after": "textofs-$(CONFIG_ARCH_MSM7X30) := 0x00208000\ntextofs-$(CONFIG_ARCH_MSM8X60) := 0x00208000\ntextofs-$(CONFIG_ARCH_MSM8960) := 0x00208000\ntextofs-$(CONFIG_ARCH_AXXIA) := 0x00308000\n",
+          "reason": "Retain upstream text offsets for other MSM platforms; the Vee3 default text offset is unchanged."
+        },
+        {
+          "before": "<<<<<<< 1327a704761cfa043f94e4fe6d1b35e604860b2a\n=======\ncore-y\t\t\t\t+= arch/arm/firmware/\n>>>>>>> 6b1ae527b1fdee86e81da0cb26ced75731c6c0fa\n",
+          "after": "core-y\t\t\t\t+= arch/arm/firmware/\n",
+          "reason": "Include the ARM firmware directory required by the 3.18 architecture build."
+        },
+        {
+          "before": "core-y\t\t\t\t+= arch/arm/perfmon/\n",
+          "after": "",
+          "reason": "Remove the unconditional legacy perfmon directory; use the upstream 3.18 ARM build rules."
         }
       ]
     }

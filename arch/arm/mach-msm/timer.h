@@ -14,7 +14,13 @@
 #ifndef _ARCH_ARM_MACH_MSM_TIMER_H_
 #define _ARCH_ARM_MACH_MSM_TIMER_H_
 
+#include <linux/init.h>
+#include <linux/version.h>
+
+void __init msm_timer_init(void);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 18, 0)
 extern struct sys_timer msm_timer;
+#endif
 
 void __iomem *msm_timer_get_timer0_base(void);
 uint32_t msm_timer_get_sclk_ticks(void);

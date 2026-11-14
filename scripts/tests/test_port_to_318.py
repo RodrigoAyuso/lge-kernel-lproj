@@ -167,5 +167,29 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(report["status"], "incomplete_unbuilt")
 
 
+class Vee3ConfigurationTests(unittest.TestCase):
+    def test_reference_profile_including_module_passes(self):
+        values = dict(port.VEE3_REQUIRED)
+        self.assertEqual(values["VOLANS_WLAN"], "m")
+        port.validate_device_config(port.VEE3_DEFCONFIG, {}, values)
+
+    def test_missing_wifi_module_is_rejected(self):
+        values = dict(port.VEE3_REQUIRED)
+        values.pop("VOLANS_WLAN")
+        with self.assertRaisesRegex(port.PortError, "VOLANS_WLAN=m"):
+            port.validate_device_config(port.VEE3_DEFCONFIG, {}, values)
+
+    def test_another_board_cannot_masquerade_as_vee3(self):
+        values = dict(port.VEE3_REQUIRED)
+        values["MACH_MSM7X25A_M4"] = "y"
+        values["LGE_BOARD_HEADER_FILE"] = '\"mach/lge/board_m4.h\"'
+        with self.assertRaisesRegex(port.PortError, "LGE_BOARD_HEADER_FILE"):
+            port.validate_device_config(port.VEE3_DEFCONFIG, {}, values)
+
+    def test_edited_input_config_cannot_remove_required_hardware(self):
+        with self.assertRaisesRegex(port.PortError, "MACH_MSM7X25A_V3=y"):
+            port.validate_device_config(port.VEE3_DEFCONFIG, {}, {})
+
+
 if __name__ == "__main__":
     unittest.main()

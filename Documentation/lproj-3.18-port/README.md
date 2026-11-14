@@ -1,14 +1,42 @@
-# Port experimental lproj: Linux 3.4.0 para 3.18.140
+# Port experimental do Vee3 para Linux 3.18.140
 
-**A migração ainda não está concluída. Esta branch contém a ferramenta Python 3,
-uma resolução revisada do Makefile e o diagnóstico reproduzível. O kernel
-versionado nesta branch continua em 3.4.0. O código integrado do 3.18 fica em
-uma nova árvore de trabalho, com conflitos explicitamente preservados no Git.**
+O alvo prioritário é o **LG L3 II (Vee3)**, com
+`lineage_vee3_defconfig`, `MACH_MSM7X25A_V3`, machine ID **10004** e
+`mach/lge/board_v3.h`. O comando de build Python usa esse defconfig por padrão.
 
-A integração real encontrou **1.231 arquivos em conflito**. A resolução do
-Makefile principal por Python reduziu esse total para **1.230**. Não houve
-compilação nem teste em aparelho. A ferramenta bloqueou a compilação antes de
-executar `make`, porque ainda existem entradas não resolvidas no índice.
+**O port ainda está incompleto. O kernel versionado nesta branch continua com
+versão 3.4.0 e recebeu as primeiras adaptações de interface do Vee3 para 3.18,
+protegidas por versão para manter a compilação de referência. A integração
+3.18.140 fica em uma nova árvore de trabalho. Restam 1.228 arquivos em conflito;
+não há kernel 3.18 completo compilado nem boot validado.**
+
+O [vee3-progress.json](vee3-progress.json) registra o estado atual, as opções de
+hardware exigidas, os hashes dos fontes modificados e o alcance das validações.
+O [audit.json](audit.json) preserva o diagnóstico inicial de 1.231 conflitos e
+as configurações originais dos aparelhos; seus resultados de ferramenta e
+compilador são históricos.
+
+## Alterações do Vee3
+
+- O descritor da placa usa `.init_time = msm_timer_init` no 3.18, mantendo o
+  caminho `.timer` da referência 3.4.
+- O timer usa `<linux/sched_clock.h>`, callback com retorno `u64` e
+  `sched_clock_register()` no 3.18. A frequência e a largura efetiva do contador
+  são preservadas. A estrutura `sys_timer` é emitida apenas na referência 3.4.
+- O header de timers locais fica condicionado a `CONFIG_LOCAL_TIMERS`; o Vee3
+  é uniprocessador. O port dos outros aparelhos não está validado.
+- O manifesto dos Makefiles resolve os arquivos principal e ARM para versões
+  idênticas ao upstream fixado, removendo a seleção forçada de NEON/vetorização
+  e o diretório legado `perfmon` das regras de compilação ARM.
+- A configuração Vee3 é verificada contra 25 seleções de hardware, incluindo
+  placa, endereço físico, display, GPU, áudio, câmera, touch, sensores, memória,
+  Binder e Wi-Fi. `VOLANS_WLAN=m` também é exigido: módulos perdidos na
+  regeneração do defconfig não passam despercebidos. Outra placa LG ativa ou
+  SMP habilitado fazem a verificação falhar.
+
+São primeiras adaptações do caminho de boot. As demais interfaces do timer,
+relógios, IRQs, memória e drivers ainda precisam ser portadas e compiladas na
+árvore completa do 3.18.
 
 ## Revisões fixadas
 
@@ -18,110 +46,94 @@ executar `make`, porque ainda existem entradas não resolvidas no índice.
 | Base de comparação | torvalds/linux, v3.4 | `76e10d158efb6d4516018846f60c2ab5501900bc` |
 | Alvo | gregkh/linux, v3.18.140 | `6b1ae527b1fdee86e81da0cb26ced75731c6c0fa` |
 
-A árvore upstream v3.4 é uma **base de comparação explícita**, não uma
-ancestralidade do histórico LG que tenha sido comprovada. O uso dessa base
-permite comparar o delta do fabricante com o upstream 3.18, inclusive em clones
-rasos. Um merge textual sem conflito ainda pode conter incompatibilidades de
-API e de comportamento; exige revisão e compilação.
+O upstream v3.4 é uma base de comparação explícita, não uma ancestralidade do
+histórico LG que tenha sido comprovada. Um merge textual sem conflitos ainda
+pode conter incompatibilidades de API e comportamento.
 
-## Reproduzir com Python 3
+## Reproduzir as edições com Python 3
 
-Execute da raiz desta branch, com Git que ofereça
-`merge-tree --write-tree --merge-base` (validado com Git 2.52.0 e Python 3.12.14).
-A ferramenta usa apenas a biblioteca padrão de Python e o executável Git.
-O clone deve conter o commit LG fixado acima. Se ele não estiver disponível,
-obtenha-o com `git fetch --depth=1 origin 1327a704761cfa043f94e4fe6d1b35e604860b2a`.
+Execute da raiz desta branch. A ferramenta usa a biblioteca padrão de Python e
+Git com `merge-tree --write-tree --merge-base` (validado com Python 3.12.14 e
+Git 2.52.0). O clone precisa conter o commit LG fixado. Se necessário, obtenha-o
+com `git fetch --depth=1 origin 1327a704761cfa043f94e4fe6d1b35e604860b2a`.
 
 ```sh
 python3 scripts/port_to_318.py fetch
-python3 scripts/port_to_318.py audit --report ../audit-3.18.140.json
 python3 scripts/port_to_318.py prepare --worktree ../lge-kernel-3.18.140 --branch port/linux-3.18.140 --report ../audit-3.18.140.json
 python3 scripts/port_to_318.py edit --worktree ../lge-kernel-3.18.140 --manifest scripts/port_to_318.makefile.json
+python3 scripts/port_to_318.py edit --worktree ../lge-kernel-3.18.140 --manifest scripts/port_to_318.vee3.json
 python3 scripts/port_to_318.py status --worktree ../lge-kernel-3.18.140
 ```
 
-`fetch` verifica os commits dos dois tags upstream. O fetch é raso para o diagnóstico local; o histórico upstream
-necessário deverá ser completado antes de publicar um futuro merge do kernel. `audit` cria objetos Git e o
-relatório; não edita o checkout. `prepare` exige um caminho e uma branch novos,
-materializa a árvore integrada e restaura os estágios de conflito do índice.
-O checkout original e suas alterações locais são preservados. O estado permite
-usar normalmente `git diff`, `git ls-files -u`, `git merge --abort` e, após
-resolver e validar o port, `git commit`. O eventual commit de merge terá o
-commit LG e o commit upstream como pais. Nenhum comando da ferramenta faz push.
+Use um caminho e uma branch novos para `prepare`. O comando materializa o merge
+em outra árvore e mantém os estágios de conflito no índice Git, preservando o
+checkout original e suas alterações. Os manifestos exigem SHA-256 antes e
+depois e substituições com correspondência única. As precondições de todos os
+arquivos são verificadas antes da primeira gravação. Arquivos ainda com
+marcadores de conflito são recusados. A ferramenta não faz push nem resolve
+conflitos por uma seleção global da versão LG ou upstream.
 
-O manifesto revisado atua somente no Makefile principal. Resolve seus quatro
-blocos em conflito e remove os ajustes remanescentes de otimização e do wrapper
-Python 2 do fabricante. O resultado corresponde byte a byte ao Makefile do
-commit 3.18.140 fixado. As regras de CPU/ABI ficam sob o controle dos Makefiles
-da arquitetura; o port desses Makefiles ainda está pendente.
+O estado permite usar `git diff`, `git ls-files -u`, `git merge --abort` e,
+depois da revisão e validação do port, `git commit`. O eventual merge terá os
+commits LG e upstream como pais. O fetch é raso para o diagnóstico local;
+complete o histórico upstream necessário antes de publicar esse futuro merge.
+O subcomando `audit --report CAMINHO` continua disponível para refazer apenas
+o diagnóstico, sem editar o checkout.
 
-As substituições feitas pelo subcomando `edit` são edições Python, com SHA-256
-do arquivo completo antes e depois. Cada trecho deve ocorrer exatamente uma
-vez. Todas as precondições são verificadas antes da primeira gravação. Arquivos
-com marcadores de conflito remanescentes são recusados. A ferramenta adiciona
-ao índice apenas os arquivos listados no manifesto, após concluir as edições.
-Outras resoluções devem ser revisadas e expressas em novos manifestos com a
-mesma estrutura. Não há seleção automática global da versão LG ou upstream.
+## Verificações realizadas
 
-## Bloqueios observados
-
-O [audit.json](audit.json) inclui a lista completa de conflitos, a configuração
-original de cada variante e os símbolos de hardware ausentes do upstream.
-Entre eles estão `ARCH_MSM7X27A`, `MACH_LGE`, `MSM_KGSL`, `FB_MSM_MDP303` e
-`MSM7X27A_AUDIO`. Copiar um defconfig para o 3.18 oficial não recria esse suporte.
-
-| Grupo | Arquivos inicialmente em conflito |
-| --- | ---: |
-| drivers/video | 247 |
-| drivers/media | 227 |
-| arch/arm | 137 |
-| include/linux | 90 |
-| drivers/usb | 56 |
-
-Também há conflitos em memória, escalonamento, arquivos, rede, segurança e
-outros subsistemas. O relatório agrupa por caminho, não por dificuldade ou
-quantidade de trabalho. A plataforma MSM7x27A e as interfaces dos drivers LG
-precisam ser adaptadas antes de considerar o kernel compilável.
-
-As sete variantes originais são preservadas para orientar o port:
-
-| Aparelho | Defconfig |
+| Verificação | Resultado e limite |
 | --- | --- |
-| L1 II | lineage_v1_defconfig |
-| L3 II | lineage_vee3_defconfig |
-| L5 com NFC | lineage_m4_defconfig |
-| L5 sem NFC | lineage_m4_nonfc_defconfig |
-| L7 com NFC | lineage_u0_defconfig |
-| L7 sem NFC | lineage_u0_nonfc_defconfig |
-| L7 com câmera de 8 MP | lineage_u0_8m_defconfig |
+| Testes Python/Git | 15 passaram; validam ferramenta, preservação de arquivos e proteção do perfil Vee3 |
+| Defconfig original Vee3 | Gerado na base 3.4; as 25 seleções de hardware passaram na verificação |
+| Objetos de referência 3.4 | `timer.o` e `board-msm7x27a_lge.o` compilaram com as alterações |
+| Interfaces com headers 3.18 | Probe ARM compilou com `-Werror`; não compila os drivers completos do Vee3 |
+| Controle negativo do probe | Código antigo falhou por `setup_sched_clock()` ausente e campo `.timer` removido |
+| Kernel completo 3.18 | Não compilado; bloqueado pelos conflitos restantes |
+| Boot e periféricos | Não testados em hardware |
 
-A escolha do primeiro modelo deve preceder a validação das opções de placa.
-Depois é necessário resolver os conflitos da plataforma e dos subsistemas,
-regenerar a configuração, compilar `zImage` e módulos e testar o boot e os
-periféricos no aparelho. Nenhuma dessas validações do kernel foi concluída.
+O probe usa declarações, callback e descritor extraídos dos fontes modificados,
+contra os headers reais de uma árvore upstream 3.18.140 preparada com
+`multi_v7_defconfig`. Essa configuração serve apenas à verificação das
+interfaces; **não representa uma configuração funcional do Vee3**. O resultado
+é um objeto ELF32 ARM EABI5. Ele não executa MMIO nem testa comportamento dos
+timers. O controle negativo usa as interfaces do commit LG original.
 
-## Validação da ferramenta
+A compilação de referência 3.4 invocou o compilador diretamente para evitar o
+wrapper Python 2 legado, com `CFLAGS_KERNEL=` e `AFLAGS_KERNEL=`. Ela verifica
+apenas os dois objetos citados, não a compilação ou o funcionamento do kernel
+completo. Na preparação das ferramentas do upstream 3.18, o compilador host
+moderno exigiu `HOSTCFLAGS=-O2 -std=gnu89 -fcommon` para o DTC legado.
+
+Foi utilizado o [toolchain do projeto TeamVee](https://github.com/TeamVee/android_prebuilt_toolchains/tree/linaro_gcc),
+commit `5743106b17c82d86bebd5c140cbd4cf3d4ee930a`, diretório
+`arm-cortex-linux-gnueabi-linaro_4.9.4-2015.06`. O GCC 4.8.0 de referência foi
+rejeitado pela verificação de versão do ARM no upstream 3.18; essa proteção não
+foi removida.
 
 ```sh
 python3 -B -m unittest discover -s scripts/tests -p 'test_port_to_318.py' -v
+python3 scripts/port_to_318.py check-vee3-config --config CAMINHO_DA_CONFIG_GERADA
 ```
 
-Onze testes com repositórios Git reais validam preservação do checkout sujo,
-retomada e cancelamento do merge, proteção de caminhos existentes, precondições
-de edição, criação posterior de commit com os dois pais e bloqueio de build.
-Esses testes validam a ferramenta; não validam o kernel.
+## Próxima etapa da integração
 
-Após resolver todos os conflitos, a compilação pode ser tentada com um
-compilador ARM de 32 bits compatível já instalado. Exemplo de interface
-(ajuste o prefixo e o defconfig ao ambiente e ao aparelho):
+Resolver os conflitos de `arch/arm/Kconfig`, `arch/arm/mach-msm/Kconfig` e
+`arch/arm/mach-msm/Makefile`, integrando as dependências de clock, IRQ e memória
+MSM7x27A com o núcleo 3.18. Depois será necessário portar os demais drivers,
+regenerar o defconfig Vee3 e compilar `zImage` e módulos antes do teste no
+aparelho. O upstream puro não define símbolos como `ARCH_MSM7X27A`,
+`MACH_LGE`, `MSM_KGSL`, `FB_MSM_MDP303` ou `MSM7X27A_AUDIO`.
+
+Após resolver todos os conflitos, o comando abaixo permite tentar a
+compilação completa. Ajuste o caminho do toolchain ao ambiente:
 
 ```sh
-python3 scripts/port_to_318.py build --worktree ../lge-kernel-3.18.140 --defconfig lineage_v1_defconfig --cross-compile arm-eabi- --output ../build-3.18.140-v1
+python3 scripts/port_to_318.py build --worktree ../lge-kernel-3.18.140 --cross-compile ../toolchains-teamvee/arm-cortex-linux-gnueabi-linaro_4.9.4-2015.06/bin/arm-eabi- --output ../build-3.18.140-vee3
 ```
 
-O comando exige saída vazia fora da árvore de fontes, recusa marcadores de
-conflito nos fontes e verifica se a regeneração do defconfig descartou símbolos
-críticos do aparelho. Também exige o alvo upstream fixado como merge pendente
-ou ancestral do checkout, para não aceitar uma simples alteração da versão no
-Makefile. Salva o log de compilação no diretório de saída. Sucesso
-da compilação continua separado da validação em hardware.
+O padrão é `lineage_vee3_defconfig`. O comando exige uma saída vazia fora da
+árvore de fontes, o alvo upstream no histórico ou no merge pendente, ausência
+de conflitos e as seleções de hardware corretas após regenerar a configuração.
+O log fica no diretório de saída. Sucesso da compilação continua separado da
+validação em hardware.

@@ -1,0 +1,74 @@
+{
+  "description": "First Vee3 boot-interface adaptations for Linux 3.18. This is not a complete timer/platform port or a bootable kernel.",
+  "source_commit": "1327a704761cfa043f94e4fe6d1b35e604860b2a",
+  "target_commit": "6b1ae527b1fdee86e81da0cb26ced75731c6c0fa",
+  "device": "vee3",
+  "files": [
+    {
+      "path": "arch/arm/mach-msm/timer.h",
+      "sha256_before": "98d8d22018aa6f07218c602c411ec3b7f9f21cf09885a102aebd0c983538a044",
+      "sha256_after": "d9b3b4a545609a74c6c197957f31a321764b96482887839e1897631a3469093e",
+      "replacements": [
+        {
+          "before": "#define _ARCH_ARM_MACH_MSM_TIMER_H_\n\nextern struct sys_timer msm_timer;",
+          "after": "#define _ARCH_ARM_MACH_MSM_TIMER_H_\n\n#include <linux/init.h>\n#include <linux/version.h>\n\nvoid __init msm_timer_init(void);\n#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 18, 0)\nextern struct sys_timer msm_timer;\n#endif",
+          "reason": "Declare the direct timer initialization hook for the 3.18 machine descriptor; retain the legacy timer declaration for the 3.4 reference build."
+        }
+      ]
+    },
+    {
+      "path": "arch/arm/mach-msm/timer.c",
+      "sha256_before": "338c895f227f6a386187ae173070bc17e2a5add347c0964016803b424b6e9ec3",
+      "sha256_after": "9111855508df32122876ccedabd70177790466d50004aea5c4b70134bd50d8c3",
+      "replacements": [
+        {
+          "before": "#include <linux/mm.h>\n\n#include <asm/localtimer.h>",
+          "after": "#include <linux/mm.h>\n#include <linux/version.h>\n\n#ifdef CONFIG_LOCAL_TIMERS\n#include <asm/localtimer.h>\n#endif",
+          "reason": "The Vee3 is uniprocessor and does not use the removed ARM local-timer header."
+        },
+        {
+          "before": "#include <asm/sched_clock.h>",
+          "after": "#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0)\n#include <linux/sched_clock.h>\n#else\n#include <asm/sched_clock.h>\n#endif",
+          "reason": "Use the generic sched_clock interface provided by Linux 3.18."
+        },
+        {
+          "before": "static u32 notrace msm_read_sched_clock(void)",
+          "after": "#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0)\nstatic u64 notrace msm_read_sched_clock(void)\n#else\nstatic u32 notrace msm_read_sched_clock(void)\n#endif",
+          "reason": "sched_clock_register requires a u64-returning counter reader; the hardware counter width remains unchanged."
+        },
+        {
+          "before": "\tsetup_sched_clock(msm_read_sched_clock, 32 - clock->shift, clock->freq);",
+          "after": "#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0)\n\tsched_clock_register(msm_read_sched_clock, 32 - clock->shift,\n\t\t\t     clock->freq);\n#else\n\tsetup_sched_clock(msm_read_sched_clock, 32 - clock->shift, clock->freq);\n#endif",
+          "reason": "Register the existing MSM counter with the 3.18 generic scheduler clock without changing its frequency or effective counter width."
+        },
+        {
+          "before": "static void __init msm_timer_init(void)",
+          "after": "void __init msm_timer_init(void)",
+          "reason": "Allow the Vee3 machine descriptor to invoke the timer initializer directly."
+        },
+        {
+          "before": "struct sys_timer msm_timer = {\n\t.init = msm_timer_init\n};",
+          "after": "#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 18, 0)\nstruct sys_timer msm_timer = {\n\t.init = msm_timer_init\n};\n#endif",
+          "reason": "Linux 3.18 no longer defines struct sys_timer; preserve it only for the 3.4 reference build."
+        }
+      ]
+    },
+    {
+      "path": "arch/arm/mach-msm/lge/common/board-msm7x27a_lge.c",
+      "sha256_before": "04baf20be6bacc1950033daf895d092417c3703458abc4413ddf59cca6387ced",
+      "sha256_after": "a30cb26bd437994cf336cb4fd754fe8c5422bd62bd181eb1c21c52007217668c",
+      "replacements": [
+        {
+          "before": "#include <linux/init.h>",
+          "after": "#include <linux/init.h>\n#include <linux/version.h>",
+          "reason": "Select the correct machine timer API for each kernel baseline."
+        },
+        {
+          "before": "#ifdef CONFIG_MACH_MSM7X25A_V3\nMACHINE_START(MSM7X25A_V3, \"MSM7225A v3\")\n\t.atag_offset\t= 0x100,\n\t.map_io\t\t= msm_common_io_init,\n\t.reserve\t= msm7x27a_reserve,\n\t.init_irq\t= msm_init_irq,\n\t.init_machine\t= msm7x2x_init,\n\t.timer\t\t= &msm_timer,",
+          "after": "#ifdef CONFIG_MACH_MSM7X25A_V3\nMACHINE_START(MSM7X25A_V3, \"MSM7225A v3\")\n\t.atag_offset\t= 0x100,\n\t.map_io\t\t= msm_common_io_init,\n\t.reserve\t= msm7x27a_reserve,\n\t.init_irq\t= msm_init_irq,\n\t.init_machine\t= msm7x2x_init,\n#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0)\n\t.init_time\t= msm_timer_init,\n#else\n\t.timer\t\t= &msm_timer,\n#endif",
+          "reason": "Use the 3.18 init_time hook only in the Vee3 descriptor. Other LG boards have not been ported or validated."
+        }
+      ]
+    }
+  ]
+}
