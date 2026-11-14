@@ -2114,6 +2114,8 @@ static int msm_fb_pan_display_sub(struct fb_var_screeninfo *var,
 		if (msm_fb_blank_sub(FB_BLANK_UNBLANK, info, mfd->op_enable)) {
 			pr_err("%s: can't turn on display!\n", __func__);
                         msm_fb_release_timeline(mfd);
+			/* Allow a later pan to retry after the panel resumes. */
+			up(&msm_fb_pan_sem);
 			return -EINVAL;
 		}
 	}
