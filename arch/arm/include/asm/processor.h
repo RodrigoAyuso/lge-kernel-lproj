@@ -29,6 +29,10 @@
 #define STACK_TOP_MAX	TASK_SIZE
 #endif
 
+#ifdef CONFIG_MMU
+#define HAVE_ARCH_PICK_MMAP_LAYOUT 1
+#endif
+
 extern unsigned int boot_reason;
 
 struct debug_info {

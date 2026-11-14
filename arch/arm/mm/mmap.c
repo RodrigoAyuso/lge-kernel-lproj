@@ -15,6 +15,23 @@
 	((((addr)+SHMLBA-1)&~(SHMLBA-1)) +	\
 	 (((pgoff)<<PAGE_SHIFT) & (SHMLBA-1)))
 
+/* Randomize once per exec, rather than leaving a large hole before each VMA. */
+void arch_pick_mmap_layout(struct mm_struct *mm)
+{
+	unsigned long random_offset = 0;
+
+	if ((current->flags & PF_RANDOMIZE) &&
+	    !(current->personality & ADDR_NO_RANDOMIZE))
+		random_offset = ((unsigned long)get_random_int() &
+				 ((1UL << mmap_rnd_bits) - 1)) << PAGE_SHIFT;
+
+	mm->mmap_base = TASK_UNMAPPED_BASE + random_offset;
+	mm->free_area_cache = mm->mmap_base;
+	mm->cached_hole_size = 0;
+	mm->get_unmapped_area = arch_get_unmapped_area;
+	mm->unmap_area = arch_unmap_area;
+}
+
 /*
  * We need to ensure that shared mappings are correctly aligned to
  * avoid aliasing issues with VIPT caches.  We need to ensure that
@@ -67,14 +84,12 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr,
 	}
 	if (len > mm->cached_hole_size) {
 	        start_addr = addr = mm->free_area_cache;
+		if (addr < mm->mmap_base)
+			start_addr = addr = mm->mmap_base;
 	} else {
-		start_addr = addr = TASK_UNMAPPED_BASE;
+		start_addr = addr = mm->mmap_base;
 	        mm->cached_hole_size = 0;
 	}
-	/* 8 bits of randomness in 20 address space bits */
-	if ((current->flags & PF_RANDOMIZE) &&
-	    !(current->personality & ADDR_NO_RANDOMIZE))
-		addr += (get_random_int() % (1 << 8)) << PAGE_SHIFT;
 
 full_search:
 	if (do_align)
@@ -89,8 +104,8 @@ full_search:
 			 * Start a new search - just in case we missed
 			 * some holes.
 			 */
-			if (start_addr != TASK_UNMAPPED_BASE) {
-				start_addr = addr = TASK_UNMAPPED_BASE;
+			if (start_addr != mm->mmap_base) {
+				start_addr = addr = mm->mmap_base;
 				mm->cached_hole_size = 0;
 				goto full_search;
 			}

@@ -1,0 +1,52 @@
+LG msm7x27a: ARM mmap ASLR para LineageOS 15.1
+===========================================
+
+O log do Vee3 mostra o init encerrando o boot em set_mmap_rnd_bits:
+  Cannot open for reading: /proc/sys/vm/mmap_rnd_bits
+  Unable to set adequate mmap entropy value!
+  Security failure...
+
+O suporte generico de Linux d07e22597d1d ja existe nesta arvore, mas o ARM
+nao selecionava HAVE_ARCH_MMAP_RND_BITS nem usava o parametro. Este patch
+completa essa ligacao, com limites ARM baseados em Linux e0c25d958f78:
+minimo 8; maximo 14/15/16 para as divisoes de VA 1G/2G/3G, respectivamente.
+Os quatro defconfigs LG usam 3G e passam a selecionar 16 bits, como o init
+do Oreo exige. A checagem de seguranca do init permanece ativa.
+
+Nesta versao 3.4, o alocador ARM antigo sorteava um pequeno deslocamento
+a cada mmap. Aumentar simplesmente esse sorteio para 16 bits criava
+buracos grandes entre VMAs e podia impedir reservas de heap. A adaptacao
+sorteia mm->mmap_base uma vez por exec e conserva o alocador bottom-up,
+o cache de busca, as regras de MAP_FIXED/hints e o alinhamento VIPT.
+
+Aplicacao incremental, na raiz dos fontes do Android:
+  git apply --check lineage15_fix_arm_mmap_aslr.patch
+  git apply lineage15_fix_arm_mmap_aslr.patch
+
+Mantenha os patches anteriores, inclusive a coleta de logs sem ADB.
+Dentro do ambiente de compilacao Ubuntu/Distrobox:
+  source build/envsetup.sh
+  lunch lineage_vee3-userdebug
+  m -j4 bootimage
+
+Antes de gravar, confirme na configuracao efetivamente compilada:
+  grep -E 'CONFIG_(HAVE_ARCH_MMAP_RND_BITS|ARCH_MMAP_RND_BITS)' \
+    out/target/product/vee3/obj/KERNEL_OBJ/.config
+O resultado deve incluir HAVE_ARCH_MMAP_RND_BITS=y, MIN=8, MAX=16 e
+CONFIG_ARCH_MMAP_RND_BITS=16. Grave o novo boot.img na particao boot.
+
+Validacao: zImage ARM do Vee3 com GCC 4.9; geracao de configuracoes e
+compilacao de arch/arm/mm/mmap.o, mm/mmap.o, mm/util.o e kernel/sysctl.o
+para V1, E610 e P700. Os valores 16/8/16 e um unico arch_pick_mmap_layout
+foram conferidos no ELF ARM do Vee3. O teste do alocador compilou o proprio
+arch/arm/mm/mmap.c com stubs de tarefas/VMAs: 65.536 deslocamentos e 1.000
+layouts com PIE, stack, bibliotecas e heaps, tambem sob UBSan.
+Nao equivale a um boot no hardware nem a uma nova compilacao completa da ROM.
+
+Se houver nova parada, recolha pelo recovery a pasta
+/cache/lineage15-bootlogs. O patch corrige a verificacao de ASLR mostrada no
+log; outras etapas do port ainda precisam da validacao no aparelho.
+
+Referencias upstream:
+https://git.kernel.org/linus/d07e22597d1d355829b7b18ac19afa912cf758d1
+https://git.kernel.org/linus/e0c25d958f78acfd5c97df5776eeba3e0684101b
