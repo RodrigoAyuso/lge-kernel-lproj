@@ -1493,6 +1493,7 @@ static int nl80211_send_iface(struct sk_buff *msg, u32 pid, u32 seq, int flags,
 	NLA_PUT_U32(msg, NL80211_ATTR_WIPHY, rdev->wiphy_idx);
 	NLA_PUT_STRING(msg, NL80211_ATTR_IFNAME, dev->name);
 	NLA_PUT_U32(msg, NL80211_ATTR_IFTYPE, dev->ieee80211_ptr->iftype);
+	NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, dev->dev_addr);
 
 	NLA_PUT_U32(msg, NL80211_ATTR_GENERATION,
 		    rdev->devlist_generation ^
@@ -2365,7 +2366,7 @@ static bool nl80211_put_sta_rate(struct sk_buff *msg, struct rate_info *info,
 				 int attr)
 {
 	struct nlattr *rate;
-	u16 bitrate;
+	u32 bitrate;
 
 	rate = nla_nest_start(msg, attr);
 	if (!rate)
@@ -2373,8 +2374,12 @@ static bool nl80211_put_sta_rate(struct sk_buff *msg, struct rate_info *info,
 
 	/* cfg80211_calculate_bitrate will return 0 for mcs >= 32 */
 	bitrate = cfg80211_calculate_bitrate(info);
-	if (bitrate > 0)
-		NLA_PUT_U16(msg, NL80211_RATE_INFO_BITRATE, bitrate);
+	if (bitrate > 0) {
+		/* Keep the legacy attribute and expose the same rate to Oreo. */
+		NLA_PUT_U32(msg, NL80211_RATE_INFO_BITRATE32, bitrate);
+		if (bitrate <= 0xffff)
+			NLA_PUT_U16(msg, NL80211_RATE_INFO_BITRATE, bitrate);
+	}
 
 	if (info->flags & RATE_INFO_FLAGS_MCS)
 		NLA_PUT_U8(msg, NL80211_RATE_INFO_MCS, info->mcs);
@@ -2553,6 +2558,52 @@ static int nl80211_dump_station(struct sk_buff *skb,
 	return err;
 }
 
+#if defined(CONFIG_MACH_MSM7X25A_V3) && \
+	(defined(CONFIG_VOLANS_WLAN) || defined(CONFIG_VOLANS_WLAN_MODULE))
+/*
+ * The shipped Volans module omits counters required by Oreo wificond. Use
+ * real netdev counters only for the associated infrastructure AP. These are
+ * interface totals; tx_errors is an approximation of the unavailable MAC
+ * retry-exhaustion counter. Preserve every field supplied by the module.
+ * Called from GET_STATION with RTNL held; current_bss needs the wdev lock.
+ */
+static void nl80211_vee3_station_stats(struct net_device *dev,
+				      const u8 *mac_addr,
+				      struct station_info *sinfo)
+{
+	struct wireless_dev *wdev = dev->ieee80211_ptr;
+	struct rtnl_link_stats64 storage;
+	const struct rtnl_link_stats64 *stats;
+	bool associated;
+	u32 missing;
+
+	if (!wdev || wdev->iftype != NL80211_IFTYPE_STATION)
+		return;
+
+	missing = (STATION_INFO_TX_PACKETS | STATION_INFO_TX_FAILED) &
+		  ~sinfo->filled;
+	if (!missing)
+		return;
+
+	wdev_lock(wdev);
+	associated = wdev->current_bss &&
+		!memcmp(mac_addr, wdev->current_bss->pub.bssid, ETH_ALEN);
+	wdev_unlock(wdev);
+	if (!associated)
+		return;
+
+	stats = dev_get_stats(dev, &storage);
+	if (missing & STATION_INFO_TX_PACKETS) {
+		sinfo->tx_packets = (u32)stats->tx_packets;
+		sinfo->filled |= STATION_INFO_TX_PACKETS;
+	}
+	if (missing & STATION_INFO_TX_FAILED) {
+		sinfo->tx_failed = (u32)stats->tx_errors;
+		sinfo->filled |= STATION_INFO_TX_FAILED;
+	}
+}
+#endif
+
 static int nl80211_get_station(struct sk_buff *skb, struct genl_info *info)
 {
 	struct cfg80211_registered_device *rdev = info->user_ptr[0];
@@ -2575,6 +2626,11 @@ static int nl80211_get_station(struct sk_buff *skb, struct genl_info *info)
 	err = rdev->ops->get_station(&rdev->wiphy, dev, mac_addr, &sinfo);
 	if (err)
 		return err;
+
+#if defined(CONFIG_MACH_MSM7X25A_V3) && \
+	(defined(CONFIG_VOLANS_WLAN) || defined(CONFIG_VOLANS_WLAN_MODULE))
+	nl80211_vee3_station_stats(dev, mac_addr, &sinfo);
+#endif
 
 	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg)
