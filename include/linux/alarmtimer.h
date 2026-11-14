@@ -41,13 +41,34 @@ struct alarm {
 	void			*data;
 };
 
+#ifdef CONFIG_ALARM_TIMER
 void alarm_init(struct alarm *alarm, enum alarmtimer_type type,
 		enum alarmtimer_restart (*function)(struct alarm *, ktime_t));
 void alarm_start(struct alarm *alarm, ktime_t start);
+void alarm_start_relative(struct alarm *alarm, ktime_t start);
+void alarm_restart(struct alarm *alarm);
 int alarm_try_to_cancel(struct alarm *alarm);
 int alarm_cancel(struct alarm *alarm);
 
 u64 alarm_forward(struct alarm *alarm, ktime_t now, ktime_t interval);
+u64 alarm_forward_now(struct alarm *alarm, ktime_t interval);
+ktime_t alarm_expires_remaining(const struct alarm *alarm);
+#else
+/* Alarm clock IDs are rejected by timerfd_create when this backend is off. */
+static inline void alarm_init(struct alarm *a, enum alarmtimer_type type,
+	enum alarmtimer_restart (*fn)(struct alarm *, ktime_t)) { }
+static inline void alarm_start(struct alarm *a, ktime_t start) { }
+static inline void alarm_start_relative(struct alarm *a, ktime_t start) { }
+static inline void alarm_restart(struct alarm *a) { }
+static inline int alarm_try_to_cancel(struct alarm *a) { return 0; }
+static inline int alarm_cancel(struct alarm *a) { return 0; }
+static inline u64 alarm_forward(struct alarm *a, ktime_t now, ktime_t interval)
+{ return 0; }
+static inline u64 alarm_forward_now(struct alarm *a, ktime_t interval)
+{ return 0; }
+static inline ktime_t alarm_expires_remaining(const struct alarm *a)
+{ return ktime_set(0, 0); }
+#endif
 
 /*
  * A alarmtimer is active, when it is enqueued into timerqueue or the
@@ -77,6 +98,10 @@ static inline int alarmtimer_callback_running(struct alarm *timer)
 
 
 /* Provide way to access the rtc device being used by alarmtimers */
+#ifdef CONFIG_ALARM_TIMER
 struct rtc_device *alarmtimer_get_rtcdev(void);
+#else
+static inline struct rtc_device *alarmtimer_get_rtcdev(void) { return NULL; }
+#endif
 
 #endif

@@ -38,6 +38,8 @@ enum android_alarm_type {
 #include <linux/ktime.h>
 #include <linux/rbtree.h>
 
+#ifdef CONFIG_RTC_INTF_ALARM
+
 /*
  * The alarm interface is similar to the hrtimer interface but adds support
  * for wakeup from suspend. It also adds an elapsed realtime clock that can
@@ -75,6 +77,12 @@ ktime_t alarm_get_elapsed_realtime(void);
 /* set rtc while preserving elapsed realtime */
 int alarm_set_rtc(const struct timespec ts);
 void alarm_update_timedelta(struct timespec tv, struct timespec ts);
+
+#else
+/* The alarmtimer backend uses timekeeping's CLOCK_BOOTTIME directly. */
+static inline void alarm_update_timedelta(struct timespec tv,
+					struct timespec ts) { }
+#endif
 
 #endif
 

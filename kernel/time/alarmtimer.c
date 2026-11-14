@@ -192,7 +192,6 @@ static enum hrtimer_restart alarmtimer_fired(struct hrtimer *timer)
 	struct timerqueue_node *next;
 	unsigned long flags;
 	ktime_t now;
-	int ret = HRTIMER_NORESTART;
 	int restart = ALARMTIMER_NORESTART;
 
 	spin_lock_irqsave(&base->lock, flags);
@@ -223,12 +222,15 @@ static enum hrtimer_restart alarmtimer_fired(struct hrtimer *timer)
 	}
 
 	if (next) {
-		hrtimer_set_expires(&base->timer, next->expires);
-		ret = HRTIMER_RESTART;
+		/* A timerfd reader may already have rearmed this shared timer
+		 * while the alarm callback ran without base->lock. Explicitly
+		 * rearm and return NORESTART, never enqueue the hrtimer twice.
+		 */
+		hrtimer_start(&base->timer, next->expires, HRTIMER_MODE_ABS);
 	}
 	spin_unlock_irqrestore(&base->lock, flags);
 
-	return ret;
+	return HRTIMER_NORESTART;
 
 }
 
@@ -330,7 +332,7 @@ void alarm_init(struct alarm *alarm, enum alarmtimer_type type,
 }
 
 /**
- * alarm_start - Sets an alarm to fire
+ * alarm_start - Sets an absolute alarm to fire
  * @alarm: ptr to alarm to set
  * @start: time to run the alarm
  */
@@ -345,6 +347,27 @@ void alarm_start(struct alarm *alarm, ktime_t start)
 	alarm->node.expires = start;
 	alarmtimer_enqueue(base, alarm);
 	spin_unlock_irqrestore(&base->lock, flags);
+}
+
+/* Adapted from upstream 6cffe00f for the 3.4 shared-base timer model. */
+void alarm_start_relative(struct alarm *alarm, ktime_t start)
+{
+	struct alarm_base *base = &alarm_bases[alarm->type];
+
+	alarm_start(alarm, ktime_add_safe(start, base->gettime()));
+}
+
+void alarm_restart(struct alarm *alarm)
+{
+	/* alarm_start requeues the node and updates the base's shared hrtimer. */
+	alarm_start(alarm, alarm->node.expires);
+}
+
+ktime_t alarm_expires_remaining(const struct alarm *alarm)
+{
+	struct alarm_base *base = &alarm_bases[alarm->type];
+
+	return ktime_sub(alarm->node.expires, base->gettime());
 }
 
 /**
@@ -425,6 +448,13 @@ u64 alarm_forward(struct alarm *alarm, ktime_t now, ktime_t interval)
 
 
 
+
+u64 alarm_forward_now(struct alarm *alarm, ktime_t interval)
+{
+	struct alarm_base *base = &alarm_bases[alarm->type];
+
+	return alarm_forward(alarm, base->gettime(), interval);
+}
 
 /**
  * clock2alarm - helper that converts from clockid to alarmtypes

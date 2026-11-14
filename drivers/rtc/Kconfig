@@ -96,7 +96,7 @@ config RTC_INTF_DEV
 
 config RTC_INTF_ALARM
 	bool "Android alarm driver"
-	depends on RTC_CLASS
+	depends on RTC_CLASS && !ALARM_TIMER
 	default y
 	help
 	  Provides non-wakeup and rtc backed wakeup alarms based on rtc or

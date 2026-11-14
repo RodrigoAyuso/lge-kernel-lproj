@@ -653,6 +653,12 @@ msmrtc_probe(struct platform_device *pdev)
 	if (rc)
 		dev_dbg(&pdev->dev, "%s: Could not initialize RPC callback\n",
 								__func__);
+	else {
+		/* alarmtimer selects RTCs whose parent can wake the system. */
+		int wake_rc = device_init_wakeup(&pdev->dev, true);
+		if (wake_rc)
+			dev_warn(&pdev->dev, "RTC wakeup setup failed: %d\n", wake_rc);
+	}
 
 	rtc_pdata->rtcalarm_time = 0;
 	platform_set_drvdata(pdev, rtc_pdata);
@@ -691,6 +697,7 @@ msmrtc_probe(struct platform_device *pdev)
 	return 0;
 
 fail_cb_setup:
+	device_init_wakeup(&pdev->dev, false);
 	msm_rpc_unregister_client(rtc_pdata->rpc_client);
 	kfree(rtc_pdata);
 	return rc;
@@ -781,6 +788,7 @@ static int __devexit msmrtc_remove(struct platform_device *pdev)
 #endif
 	msm_rpc_unregister_client(rtc_pdata->rpc_client);
 	kfree(rtc_pdata);
+	device_init_wakeup(&pdev->dev, false);
 
 	return 0;
 }

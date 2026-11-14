@@ -2,6 +2,16 @@
 # Timer subsystem related configuration options
 #
 
+config ALARM_TIMER
+	bool "RTC backed alarm timers"
+	depends on RTC_CLASS
+	default n
+	help
+	  Enable CLOCK_REALTIME_ALARM and CLOCK_BOOTTIME_ALARM timers.
+	  This backend is required by Android 8.1 timerfd alarms. It replaces
+	  the legacy RTC_INTF_ALARM scheduler; ANDROID_INTF_ALARM_DEV can
+	  provide the compatible /dev/alarm interface on top of this backend.
+
 # Core internal switch. Selected by NO_HZ / HIGH_RES_TIMERS. This is
 # only related to the tick functionality. Oneshot clockevent devices
 # are supported independ of this.
