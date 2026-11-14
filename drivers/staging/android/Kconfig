@@ -12,6 +12,20 @@ config ANDROID_BINDER_IPC
 	bool "Android Binder IPC Driver"
 	default n
 
+config ANDROID_BINDER_IPC_32BIT
+	bool "Use the old 32-bit Binder wire protocol"
+	depends on ANDROID_BINDER_IPC
+	default n
+	help
+	  Leave disabled for TARGET_USES_64_BIT_BINDER=true, including ARM32.
+
+config ANDROID_BINDER_DEVICES
+	string "Android Binder devices"
+	depends on ANDROID_BINDER_IPC
+	default "binder,hwbinder,vndbinder"
+	help
+	  Each device has its own context manager. Required by Oreo HIDL.
+
 config ASHMEM
 	bool "Enable the Anonymous Shared Memory Subsystem"
 	default n
@@ -79,7 +93,7 @@ source "drivers/staging/android/switch/Kconfig"
 
 config ANDROID_INTF_ALARM_DEV
 	bool "Android alarm driver"
-	depends on RTC_CLASS
+	depends on ALARM_TIMER && !RTC_INTF_ALARM
 	default n
 	help
 	  Provides non-wakeup and rtc backed wakeup alarms based on rtc or
