@@ -64,13 +64,7 @@
 #ifndef CONFIG_LGE_USB_GADGET_DRIVER
 #include "f_acm.c"
 #endif
-#ifdef CONFIG_USB_ANDROID_FUNCTIONFS
-/* u_serial.c and f_fs.c provide their own local debug macro. */
-#undef pr_vdebug
-#include "f_fs.c"
-#else
 #include "f_adb.c"
-#endif
 #include "f_ccid.c"
 #include "f_mtp.c"
 #include "f_accessory.c"
@@ -368,9 +362,6 @@ static void android_disable(struct android_dev *dev)
 struct adb_data {
 	bool opened;
 	bool enabled;
-#ifdef CONFIG_USB_ANDROID_FUNCTIONFS
-	struct ffs_data *ffs;
-#endif
 };
 
 static int
@@ -381,58 +372,20 @@ adb_function_init(struct android_usb_function *f,
 	if (!f->config)
 		return -ENOMEM;
 
-#ifdef CONFIG_USB_ANDROID_FUNCTIONFS
-	{
-		int ret = functionfs_init();
-
-		if (ret) {
-			kfree(f->config);
-			f->config = NULL;
-		}
-		return ret;
-	}
-#else
 	return adb_setup();
-#endif
 }
 
 static void adb_function_cleanup(struct android_usb_function *f)
 {
-#ifdef CONFIG_USB_ANDROID_FUNCTIONFS
-	struct android_dev *dev = _android_dev;
-	struct adb_data *data = f->config;
-
-	/* The composite core has already removed the configurations. */
-	mutex_lock(&dev->mutex);
-	if (data) {
-		data->enabled = false;
-		data->opened = false;
-		if (data->ffs)
-			functionfs_unbind(data->ffs);
-		f->config = NULL;
-	}
-	mutex_unlock(&dev->mutex);
-	functionfs_cleanup();
-	kfree(data);
-#else
 	adb_cleanup();
 	kfree(f->config);
-#endif
 }
 
 static int
 adb_function_bind_config(struct android_usb_function *f,
 		struct usb_configuration *c)
 {
-#ifdef CONFIG_USB_ANDROID_FUNCTIONFS
-	struct adb_data *data = f->config;
-
-	if (!data || !data->opened || !data->ffs)
-		return -ENODEV;
-	return functionfs_bind_config(c->cdev, c, data->ffs);
-#else
 	return adb_bind_config(c);
-#endif
 }
 
 static void adb_android_function_enable(struct android_usb_function *f)
@@ -468,70 +421,6 @@ static struct android_usb_function adb_function = {
 	.bind_config	= adb_function_bind_config,
 };
 
-#ifdef CONFIG_USB_ANDROID_FUNCTIONFS
-static int functionfs_check_dev_callback(const char *dev_name)
-{
-	return strcmp(dev_name, "adb") ? -ENODEV : 0;
-}
-
-static int functionfs_ready_callback(struct ffs_data *ffs)
-{
-	struct android_dev *dev = _android_dev;
-	struct adb_data *data;
-	int ret;
-
-	mutex_lock(&dev->mutex);
-	data = adb_function.config;
-	if (!data || !dev->cdev) {
-		ret = -ENODEV;
-		goto out;
-	}
-	if (data->opened) {
-		ret = -EBUSY;
-		goto out;
-	}
-
-	ret = functionfs_bind(ffs, dev->cdev);
-	if (ret)
-		goto out;
-
-	data->ffs = ffs;
-	data->opened = true;
-	if (data->enabled) {
-		ret = android_enable(dev);
-		if (ret) {
-			/* android_enable restored the readiness gate on failure. */
-			data->opened = false;
-			data->ffs = NULL;
-			functionfs_unbind(ffs);
-			goto out;
-		}
-	}
-	pr_info("android_usb: FunctionFS adb ready\n");
-out:
-	mutex_unlock(&dev->mutex);
-	return ret;
-}
-
-static void functionfs_closed_callback(struct ffs_data *ffs)
-{
-	struct android_dev *dev = _android_dev;
-	struct adb_data *data;
-
-	mutex_lock(&dev->mutex);
-	data = adb_function.config;
-	if (data && data->ffs == ffs) {
-		data->opened = false;
-		/* Remove the functions before releasing the FunctionFS binding. */
-		if (data->enabled)
-			android_disable(dev);
-		functionfs_unbind(ffs);
-		data->ffs = NULL;
-		pr_info("android_usb: FunctionFS adb closed\n");
-	}
-	mutex_unlock(&dev->mutex);
-}
-#else
 static void adb_ready_callback(void)
 {
 	struct android_dev *dev = _android_dev;
@@ -561,7 +450,6 @@ static void adb_closed_callback(void)
 
 	mutex_unlock(&dev->mutex);
 }
-#endif
 
 
 /*-------------------------------------------------------------------------*/

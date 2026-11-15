@@ -1046,19 +1046,6 @@ config USB_G_WEBCAM
 
 endchoice
 
-config USB_ANDROID_FUNCTIONFS
-	bool "FunctionFS ADB transport for the Android gadget"
-	depends on USB_G_ANDROID
-	default n
-	help
-	  Use FunctionFS instead of /dev/android_adb for the Android gadget's
-	  adb function. This supports the stock Android 8.1 adbd without
-	  changing the Android sysfs compositions (adb, mtp,adb, and so on).
-
-	  Mount functionfs with the instance name adb before starting adbd.
-	  The gadget waits for userspace descriptors before connecting.
-	  This does not build the standalone g_ffs gadget.
-
 config USB_CSW_HACK
 	boolean "USB Mass storage csw hack Feature"
 	default y
