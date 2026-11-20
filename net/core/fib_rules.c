@@ -190,9 +190,37 @@ static inline uid_t fib_nl_uid(struct nlattr *nla)
 	return nla_get_u32(nla);
 }
 
-static int nla_put_uid(struct sk_buff *skb, int idx, uid_t uid)
+/* Android 8.1 uses FRA_UID_RANGE=20; accept the old Android pair as well. */
+static int fib_rule_parse_uid_range(struct nlattr **tb, uid_t *start, uid_t *end)
 {
-	return nla_put_u32(skb, idx, uid);
+	struct fib_rule_uid_range range;
+	bool modern = tb[FRA_UID_RANGE] != NULL;
+	bool legacy = tb[FRA_UID_START] || tb[FRA_UID_END];
+
+	*start = *end = INVALID_UID;
+	if (modern) {
+		if (nla_len(tb[FRA_UID_RANGE]) != sizeof(range))
+			return -EINVAL;
+		memcpy(&range, nla_data(tb[FRA_UID_RANGE]), sizeof(range));
+		*start = range.start;
+		*end = range.end;
+	}
+	if (legacy) {
+		if (!tb[FRA_UID_START] || !tb[FRA_UID_END] ||
+		    nla_len(tb[FRA_UID_START]) != sizeof(uid_t) ||
+		    nla_len(tb[FRA_UID_END]) != sizeof(uid_t))
+			return -EINVAL;
+		if (modern &&
+		    (*start != fib_nl_uid(tb[FRA_UID_START]) ||
+		     *end != fib_nl_uid(tb[FRA_UID_END])))
+			return -EINVAL;
+		*start = fib_nl_uid(tb[FRA_UID_START]);
+		*end = fib_nl_uid(tb[FRA_UID_END]);
+	}
+	if ((modern || legacy) &&
+	    (!uid_valid(*start) || !uid_valid(*end) || !uid_lte(*start, *end)))
+		return -EINVAL;
+	return 0;
 }
 
 static int fib_uid_range_match(struct flowi *fl, struct fib_rule *rule)
@@ -389,18 +417,9 @@ static int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 	} else if (rule->action == FR_ACT_GOTO)
 		goto errout_free;
 
-	/* UID start and end must either both be valid or both unspecified. */
-	rule->uid_start = rule->uid_end = INVALID_UID;
-	if (tb[FRA_UID_START] || tb[FRA_UID_END]) {
-		if (tb[FRA_UID_START] && tb[FRA_UID_END]) {
-			rule->uid_start = fib_nl_uid(tb[FRA_UID_START]);
-			rule->uid_end = fib_nl_uid(tb[FRA_UID_END]);
-		}
-		if (!uid_valid(rule->uid_start) ||
-		    !uid_valid(rule->uid_end) ||
-		    !uid_lte(rule->uid_start, rule->uid_end))
+	err = fib_rule_parse_uid_range(tb, &rule->uid_start, &rule->uid_end);
+	if (err)
 		goto errout_free;
-	}
 
 	err = ops->configure(rule, skb, frh, tb);
 	if (err < 0)
@@ -462,6 +481,7 @@ static int fib_nl_delrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 	struct fib_rule *rule, *tmp;
 	struct nlattr *tb[FRA_MAX+1];
 	int err = -EINVAL;
+	uid_t uid_start = INVALID_UID, uid_end = INVALID_UID;
 
 	if (nlh->nlmsg_len < nlmsg_msg_size(sizeof(*frh)))
 		goto errout;
@@ -479,6 +499,12 @@ static int fib_nl_delrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 	err = validate_rulemsg(frh, tb, ops);
 	if (err < 0)
 		goto errout;
+
+	if (tb[FRA_UID_RANGE]) {
+		err = fib_rule_parse_uid_range(tb, &uid_start, &uid_end);
+		if (err)
+			goto errout;
+	}
 
 	list_for_each_entry(rule, &ops->rules_list, list) {
 		if (frh->action && (frh->action != rule->action))
@@ -506,6 +532,10 @@ static int fib_nl_delrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 
 		if (tb[FRA_FWMASK] &&
 		    (rule->mark_mask != nla_get_u32(tb[FRA_FWMASK])))
+			continue;
+
+		if (tb[FRA_UID_RANGE] &&
+		    (rule->uid_start != uid_start || rule->uid_end != uid_end))
 			continue;
 
 		if (tb[FRA_UID_START] &&
@@ -571,8 +601,7 @@ static inline size_t fib_rule_nlmsg_size(struct fib_rules_ops *ops,
 			 + nla_total_size(4) /* FRA_TABLE */
 			 + nla_total_size(4) /* FRA_FWMARK */
 			 + nla_total_size(4) /* FRA_FWMASK */
-			 + nla_total_size(4) /* FRA_UID_START */
-			 + nla_total_size(4); /* FRA_UID_END */
+			 + nla_total_size(sizeof(struct fib_rule_uid_range));
 
 	if (ops->nlmsg_payload)
 		payload += ops->nlmsg_payload(rule);
@@ -630,11 +659,10 @@ static int fib_nl_fill_rule(struct sk_buff *skb, struct fib_rule *rule,
 	if (rule->target)
 		NLA_PUT_U32(skb, FRA_GOTO, rule->target);
 
-	if (uid_valid(rule->uid_start))
-	     nla_put_uid(skb, FRA_UID_START, rule->uid_start);
-
-	if (uid_valid(rule->uid_end))
-	     nla_put_uid(skb, FRA_UID_END, rule->uid_end);
+	if (uid_valid(rule->uid_start) && uid_valid(rule->uid_end)) {
+		struct fib_rule_uid_range range = { rule->uid_start, rule->uid_end };
+		NLA_PUT(skb, FRA_UID_RANGE, sizeof(range), &range);
+	}
 
 	if (ops->fill(rule, skb, frh) < 0)
 		goto nla_put_failure;

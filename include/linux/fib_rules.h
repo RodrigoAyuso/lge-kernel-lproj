@@ -29,6 +29,11 @@ struct fib_rule_hdr {
 	__u32		flags;
 };
 
+struct fib_rule_uid_range {
+	__u32 start;
+	__u32 end;
+};
+
 enum {
 	FRA_UNSPEC,
 	FRA_DST,	/* destination address */
@@ -51,6 +56,8 @@ enum {
 	FRA_OIFNAME,
 	FRA_UID_START,	/* UID range */
 	FRA_UID_END,
+	/* Keep the legacy Android UID attribute numbers (18 and 19). */
+	FRA_UID_RANGE,	/* Upstream/Oreo UID range, attribute 20 */
 	__FRA_MAX
 };
 
