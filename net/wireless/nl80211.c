@@ -2558,7 +2558,8 @@ static int nl80211_dump_station(struct sk_buff *skb,
 	return err;
 }
 
-#if defined(CONFIG_MACH_MSM7X25A_V3) && \
+#if (defined(CONFIG_MACH_MSM7X25A_V1) || \
+     defined(CONFIG_MACH_MSM7X25A_V3)) && \
 	(defined(CONFIG_VOLANS_WLAN) || defined(CONFIG_VOLANS_WLAN_MODULE))
 /*
  * The shipped Volans module omits counters required by Oreo wificond. Use
@@ -2567,7 +2568,7 @@ static int nl80211_dump_station(struct sk_buff *skb,
  * retry-exhaustion counter. Preserve every field supplied by the module.
  * Called from GET_STATION with RTNL held; current_bss needs the wdev lock.
  */
-static void nl80211_vee3_station_stats(struct net_device *dev,
+static void nl80211_lge_volans_station_stats(struct net_device *dev,
 				      const u8 *mac_addr,
 				      struct station_info *sinfo)
 {
@@ -2627,9 +2628,10 @@ static int nl80211_get_station(struct sk_buff *skb, struct genl_info *info)
 	if (err)
 		return err;
 
-#if defined(CONFIG_MACH_MSM7X25A_V3) && \
+#if (defined(CONFIG_MACH_MSM7X25A_V1) || \
+     defined(CONFIG_MACH_MSM7X25A_V3)) && \
 	(defined(CONFIG_VOLANS_WLAN) || defined(CONFIG_VOLANS_WLAN_MODULE))
-	nl80211_vee3_station_stats(dev, mac_addr, &sinfo);
+	nl80211_lge_volans_station_stats(dev, mac_addr, &sinfo);
 #endif
 
 	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);

@@ -160,117 +160,17 @@ static int rt8966bl_update_status(struct backlight_device *dev)
 
 static int CalBrightnessVal(int next)
 {
-	int output=0;
-
-	printk("[%s] next[%d]!!!\n", __func__, next);
-	
-	if(next >= 1 && next < 7)
-	{
-		output = 30;
-		return output;
-	}
-	if(next >=8 && next < 13)
-	{	//30~27
-		if(next >= 6 && next < 8)
-		{
-			output = 30;
-		}
-		else if(next >= 8 && next < 10)
-		{
-			output = 29;
-		}		
-		else if(next == 10 && next < 12)
-		{
-			output = 28;
-		}
-		return output;
-	}
-	if(next >=14 && next < 19)
-	{	//27~22
-		if(next >= 12 && next < 14)
-		{
-			if(next == 12) 
-				output = 27;
-			if(next == 13) 
-				output = 26;
-
-			return output;
-		}
-		else if(next >= 14 && next < 16)
-		{			
-			if(next == 14) 
-				output = 25;
-			if(next == 15) 
-				output = 23;
-
-			return output;
-			
-		}		
-		else if(next >= 16 && next < 18)
-		{
-			output = 22;
-			return output;
-		}
-	}
-	if(next >=19 && next < 26)
-	{	//21~13
-		if(next >= 18 && next < 20)
-		{
-			if(next == 18) 
-				output = 21;
-			if(next == 19) 
-				output = 19;
-			return output;
-		}
-		else if(next >= 20 && next < 22)
-		{			
-			if(next == 20) 
-				output = 18;
-			if(next == 21) 
-				output = 16;
-			return output;
-		}		
-		else if(next >= 22 && next < 24)
-		{
-			if(next == 22) 
-				output = 15;
-			if(next == 23) 
-				output = 13;
-			return output;
-		}
-	}
-	if(next >= 27 && next < 31)
-	{	//12 ~ 1
-		if(next >= 24 && next < 26)
-		{
-			if(next == 24) 
-				output = 12;
-			if(next == 25) 
-				output = 9;
-			return output;
-		}
-		else if(next >= 26 && next < 28)
-		{			
-			if(next == 26) 
-				output = 8;
-			if(next == 27) 
-				output = 6;
-			return output;
-		}		
-		else if(next >= 28 && next < 31)
-		{
-			if(next == 28) 
-				output = 7;
-			if(next == 29) 
-				output = 4;
-			if(next == 30) 
-				output = 2;
-			
-			return output;
-		}
-	}
-	printk("[%s] Nochoice Data it is Very seriosly Error!!!\n", __func__);
-	return 0;
+    static const unsigned char levels[32] = {
+        31, 30, 30, 30, 30, 30, 30, 30,
+        29, 29, 28, 28, 27, 26, 25, 23,
+        22, 22, 21, 19, 18, 16, 15, 13,
+        12,  9,  8,  6,  6,  4,  2,  0
+    };
+    if (next < 0)
+        next = 0;
+    if (next > LCD_LED_MAX)
+        next = LCD_LED_MAX;
+    return levels[next];
 }
 
 int	display_on;
@@ -301,12 +201,10 @@ static void leds_brightness_set(struct led_classdev *led_cdev, enum led_brightne
 		}
 		return;
 	}
-	if(value<=9) {
-		// trans from data minimum value is 10		
-		printk("[%s] Skip Set!!!!!\n", __func__);		
-		//lcd default white type bad [1] turn 0n
+	if (value && value < 10)
+		value = 10;
+	if (!value)
 		return;
-	}
 	
 	if((value!=0) && (StatusBacklightOnOff==0)&&(display_on==1)){
 		lge_rt8966a_backlight_control(1);
@@ -333,7 +231,7 @@ static void leds_brightness_set(struct led_classdev *led_cdev, enum led_brightne
 			return;
 	}
 	
-	if(next!=LCD_LED_MAX) {
+	if (next <= LCD_LED_MAX) {
 			if(value!=10){
 				summery = CalBrightnessVal(next);		
 				

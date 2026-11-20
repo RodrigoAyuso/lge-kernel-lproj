@@ -1,5 +1,6 @@
 config ARM
 	bool
+	select HAVE_ARCH_SECCOMP_FILTER if AEABI && !OABI_COMPAT
 	default y
 	select HAVE_AOUT
 	select HAVE_DMA_API_DEBUG
@@ -1827,6 +1828,8 @@ config OABI_COMPAT
 	  in memory differs between the legacy ABI and the new ARM EABI
 	  (only for non "thumb" binaries). This option adds a tiny
 	  overhead to all syscalls and produces a slightly larger kernel.
+	  Seccomp filtering requires pure EABI user space, since the filter
+	  does not distinguish the old calling convention.
 	  If you know you'll be using only pure EABI user space then you
 	  can say N here. If this option is not selected and you attempt
 	  to execute a legacy ABI binary then the result will be
